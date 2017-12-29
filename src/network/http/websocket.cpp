@@ -3,6 +3,7 @@
 #include <websocketpp/config/asio.hpp>
 #include <websocketpp/server.hpp>
 #include <websocketpp/config/asio_client.hpp>
+#include <websocketpp/extensions/permessage_deflate/enabled.hpp>
 #include <websocketpp/client.hpp>
 #include <websocketpp/logger/stub.hpp>
 
@@ -101,6 +102,12 @@ namespace fc { namespace http {
           typedef websocketpp::transport::asio::endpoint<transport_config>
               transport_type;
 
+          /// enable the permessage_compress extension
+          struct permessage_deflate_config {};
+          typedef websocketpp::extensions::permessage_deflate::enabled
+                  <permessage_deflate_config> permessage_deflate_type;
+
+          // override default value of 5 sec timeout
           static const long timeout_open_handshake = 0;
       };
       struct asio_tls_stub_log : public websocketpp::config::asio_tls {
@@ -137,7 +144,43 @@ namespace fc { namespace http {
       };
 
 
+       struct asio_tls_stub_log_and_deflate : public websocketpp::config::asio_tls {
+           typedef asio_tls_stub_log_and_deflate type;
+           typedef asio_tls base;
 
+           //// All boilerplate copying the base class's config, except as noted
+           typedef base::concurrency_type concurrency_type;
+
+           typedef base::request_type request_type;
+           typedef base::response_type response_type;
+
+           typedef base::message_type message_type;
+           typedef base::con_msg_manager_type con_msg_manager_type;
+           typedef base::endpoint_msg_manager_type endpoint_msg_manager_type;
+
+           /// Custom Logging policies, use do-nothing log::stub instead of log::basic
+           typedef websocketpp::log::stub elog_type;
+           typedef websocketpp::log::stub alog_type;
+
+           typedef base::rng_type rng_type;
+
+           struct transport_config : public base::transport_config {
+               typedef type::concurrency_type concurrency_type;
+               typedef type::alog_type alog_type;
+               typedef type::elog_type elog_type;
+               typedef type::request_type request_type;
+               typedef type::response_type response_type;
+               typedef websocketpp::transport::asio::tls_socket::endpoint socket_type;
+           };
+
+           typedef websocketpp::transport::asio::endpoint<transport_config>
+                   transport_type;
+
+           /// enable the permessage_compress extension
+           struct permessage_deflate_config {};
+           typedef websocketpp::extensions::permessage_deflate::enabled
+                   <permessage_deflate_config> permessage_deflate_type;
+       };
 
 
       using websocketpp::connection_hdl;
@@ -203,7 +246,11 @@ namespace fc { namespace http {
                        auto payload = msg->get_payload();
                        std::shared_ptr<websocket_connection> con = current_con->second;
                        ++_pending_messages;
-                       auto f = fc::async([this,con,payload](){ if( _pending_messages ) --_pending_messages; con->on_message( payload ); });
+                       auto f = fc::async([this,con,payload](){
+                           if( _pending_messages )
+                               --_pending_messages;
+                           con->on_message( payload );
+                       });
                        if( _pending_messages > 100 ) 
                          f.wait();
                     }).wait();
@@ -297,7 +344,7 @@ namespace fc { namespace http {
       class websocket_tls_server_impl
       {
          public:
-            websocket_tls_server_impl( const string& server_pem, const string& ssl_password )
+            websocket_tls_server_impl( const string& server_pem, const string& ssl_password, bool enable_permessage_deflate = true )
             :_server_thread( fc::thread::current() )
             {
                //if( server_pem.size() )
@@ -595,7 +642,8 @@ namespace fc { namespace http {
 
    } // namespace detail
 
-   websocket_server::websocket_server():my( new detail::websocket_server_impl() ) {}
+   websocket_server::websocket_server(bool enable_permessage_deflate):
+           my( new detail::websocket_server_impl() ) {}
    websocket_server::~websocket_server(){}
 
    void websocket_server::on_connection( const on_connection_handler& handler )
@@ -619,7 +667,7 @@ namespace fc { namespace http {
 
 
 
-   websocket_tls_server::websocket_tls_server( const string& server_pem, const string& ssl_password ):my( new detail::websocket_tls_server_impl(server_pem, ssl_password) ) {}
+   websocket_tls_server::websocket_tls_server( const string& server_pem, const string& ssl_password, const bool enable_permessage_deflate ):my( new detail::websocket_tls_server_impl(server_pem, ssl_password, enable_permessage_deflate) ) {}
    websocket_tls_server::~websocket_tls_server(){}
 
    void websocket_tls_server::on_connection( const on_connection_handler& handler )

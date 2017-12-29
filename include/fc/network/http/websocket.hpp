@@ -20,7 +20,9 @@ namespace fc { namespace http {
          virtual ~websocket_connection(){}
          virtual void send_message( const std::string& message ) = 0;
          virtual void close( int64_t code, const std::string& reason  ){};
-         void on_message( const std::string& message ) { _on_message(message); }
+         void on_message( const std::string& message ) {
+            _on_message(message);
+         }
          string on_http( const std::string& message ) { return _on_http(message); }
 
          void on_message_handler( const std::function<void(const std::string&)>& h ) { _on_message = h; }
@@ -44,7 +46,7 @@ namespace fc { namespace http {
    class websocket_server
    {
       public:
-         websocket_server();
+         websocket_server(bool enable_permessage_deflate = true);
          ~websocket_server();
 
          void on_connection( const on_connection_handler& handler);
@@ -62,7 +64,8 @@ namespace fc { namespace http {
    {
       public:
          websocket_tls_server( const std::string& server_pem = std::string(),
-                           const std::string& ssl_password = std::string());
+                               const std::string& ssl_password = std::string(),
+                               bool enable_permessage_deflate = true);
          ~websocket_tls_server();
 
          void on_connection( const on_connection_handler& handler);
